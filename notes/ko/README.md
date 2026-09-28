@@ -77,8 +77,11 @@ npm run trace -- extract --environment work-codex \
 도구는 `list_environments`, `list_local_sessions`, `extract_local_events`입니다.
 추출 시 환경 이름을 반드시 지정합니다. [도구 가이드](docs/tools.md)를 참고하세요.
 스킬과 개발용 매니페스트가 포함되어 있으며, 빌드 후 MCP를 직접 연결합니다.
-마켓플레이스 자동 설치, HTTP, 터널은 아직 구현하지 않았습니다.
-로컬 추출에는 계정 인증정보나 모델 API 키가 필요하지 않습니다.
+마켓플레이스 자동 설치와 HTTP는 아직 구현하지 않았습니다.
+비공개 터널은 `npm run tunnel:init`, `npm run tunnel:doctor`,
+`npm run start:tunnel`로 실행하며 `npm run remote`도 같은 실행 명령입니다.
+클라이언트·프로필·실행 키는 [터널 가이드](docs/tunnel-connection.md)를 참고하세요.
+로컬 추출 자체에는 계정 인증정보나 모델 API 키가 필요하지 않습니다.
 
 ## 시간의 의미
 

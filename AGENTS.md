@@ -14,6 +14,7 @@
 - Run `npm run typecheck` and appropriate tests (`npm test` for extraction or MCP
   changes). Stdio starts with `npm start` or `npm run start:stdio`; stdout belongs
   to MCP. Keep the JSON-export CLI separate.
-- HTTP and tunnel transports are not implemented. When adding them, follow the
-  workspace organization conventions and inspect Vault's launcher and guides;
-  use Trace-specific settings and profiles, never Vault credentials.
+- Private tunnels use `scripts/tunnel.mjs` and the pinned-config stdio bootstrap.
+  Test launcher changes with a fake client and keep both language guides aligned.
+  Use Trace-specific settings and profiles, never Vault credentials. HTTP is not
+  implemented; follow workspace conventions when adding another transport.

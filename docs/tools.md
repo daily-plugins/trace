@@ -5,6 +5,8 @@
 All tools read the config selected by `TRACE_CONFIG`, or
 `~/.config/trace/config.json`. Each request reloads it. Register environments
 through the CLI; MCP exposes no configuration writes or arbitrary path input.
+The [private tunnel](tunnel-connection.md) launches the same stdio server with a
+pinned config path. It exposes the same tools and selection rules.
 
 `list_environments({})` returns registered names, agent types, roots, and adapter
 capabilities. It reads configuration only and never scans session directories.

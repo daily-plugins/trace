@@ -80,8 +80,11 @@ Available tools: `list_environments`, `list_local_sessions`, `extract_local_even
 Extraction tools require an environment name. See [tool semantics](docs/tools.md).
 The plugin contains a skill and development manifest. Build the checkout and
 configure the MCP connection explicitly; automatic marketplace installation,
-HTTP and tunnels are not implemented. No account credentials or model API key
-are required for extraction.
+HTTP is not implemented. Private tunnel startup is available through
+`npm run tunnel:init`, `npm run tunnel:doctor`, and `npm run start:tunnel`
+(`npm run remote` is an alias). Follow the [tunnel guide](docs/tunnel-connection.md)
+for its separate client, profile, and runtime key. Local extraction itself needs
+no account credentials or model API key.
 
 ## Meaning of time
 
