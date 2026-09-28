@@ -3,6 +3,8 @@
 사용자가 선택한 환경에서 로컬 에이전트 세션을 읽고, 시각과 원본 파일·줄 번호를
 포함한 공통 이벤트로 추출합니다.
 
+저장소: [daily-plugins/trace](https://github.com/daily-plugins/trace).
+
 ## 지원하는 소스
 
 | 에이전트 | 세션 루트 예시 | 추출 내용 |

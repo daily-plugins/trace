@@ -3,6 +3,8 @@
 Extract local agent sessions from an explicitly selected environment. Trace
 normalizes activity into timestamped events with source file/line evidence.
 
+Repository: [daily-plugins/trace](https://github.com/daily-plugins/trace).
+
 ## Supported sources
 
 | Agent | Session root examples | Supported records |
