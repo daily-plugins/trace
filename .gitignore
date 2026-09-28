@@ -8,3 +8,5 @@ exports/
 *.jsonl
 *.sqlite*
 .DS_Store
+.local/
+trace.config.json
