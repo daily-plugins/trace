@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, readdir, realpath } from 'node:fs/promises';
+import { open, readdir, realpath, lstat } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
@@ -13,6 +13,7 @@ const iso = (v: unknown): string | null => {
   return Number.isFinite(n) ? new Date(n).toISOString() : null;
 };
 export function bounds(q: Query): [number, number] {
+  if (q.scanMode !== undefined && !['auto', 'full'].includes(q.scanMode)) throw new Error('scanMode must be auto or full.');
   if ((q.from !== undefined && !iso(q.from)) || (q.to !== undefined && !iso(q.to))) throw new Error('Use ISO timestamps with an explicit timezone.');
   const from = q.from ? Date.parse(q.from) : -Infinity;
   const to = q.to ? Date.parse(q.to) : Infinity;
@@ -28,11 +29,24 @@ export function unionMs(intervals: [number, number][]): number {
   }
   return total;
 }
-const MAX_FILES = 1000, MAX_FILE_BYTES = 64 * 1024 * 1024, MAX_SCAN_BYTES = 256 * 1024 * 1024;
+interface ScanLimits { maxFiles: number; maxFileBytes: number; maxScanBytes: number }
+const DEFAULT_LIMITS: ScanLimits = { maxFiles: 1000, maxFileBytes: 64 * 1024 * 1024, maxScanBytes: 256 * 1024 * 1024 };
 const MAX_EVENTS = 100_000;
 
+// Date folders are priority hints, not exclusion boundaries: old sessions can resume.
+// One-day padding accounts for date folders written in a different local timezone.
+function inDateWindow(file: string, from: number, to: number): boolean {
+  const match = /(?:^|[/\\])(\d{4})[/\\](\d{2})[/\\](\d{2})(?:[/\\])/.exec(file);
+  if (!match || (!Number.isFinite(from) && !Number.isFinite(to))) return false;
+  const day = Date.parse(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
+  return day + 2 * 86400000 > from && day - 86400000 < to;
+}
+
 export class LocalSessionAdapter implements SessionAdapter {
-  constructor(private environment: Environment) {}
+  private limits: ScanLimits;
+  constructor(private environment: Environment, limits: Partial<ScanLimits> = {}) {
+    this.limits = { ...DEFAULT_LIMITS, ...limits };
+  }
   async extract(q: Query = {}): Promise<Extraction> {
     const [from, to] = bounds(q);
     const diagnostics: Diagnostic[] = [];
@@ -41,12 +55,13 @@ export class LocalSessionAdapter implements SessionAdapter {
     const measured = decoder.executionTiming === 'explicit-turns';
     const result: Extraction = {
       source: this.environment.agent, environment: this.environment.name, root, range: { from: q.from ? iso(q.from) : null, to: q.to ? iso(q.to) : null },
+      scan: { strategy: q.scanMode === 'full' ? 'full' : 'mtime-assisted', discoveredFiles: 0, skippedBeforeRange: 0, candidateFiles: 0, readFiles: 0, bytesRead: 0 },
       sessions: [], events: [], metrics: { turnExecutionUnionMs: null, summedSessionTurnExecutionMs: null, sessionsWithTiming: 0, sessionsWithoutTiming: 0 },
       nextOffset: null, diagnostics, incomplete: false,
     };
     try { root = await realpath(root); result.root = root; }
     catch { diagnostics.push({ code: 'source_unavailable' }); result.incomplete = true; return result; }
-    const files: string[] = [];
+    const candidates: { path: string; modified: number; inWindow: boolean }[] = [];
     let entries = 0, stopped = false;
     const walk = async (dir: string, depth: number): Promise<void> => {
       if (stopped) return;
@@ -54,18 +69,33 @@ export class LocalSessionAdapter implements SessionAdapter {
       let children;
       try { children = await readdir(dir, { withFileTypes: true }); }
       catch { diagnostics.push({ file: relative(root, dir), code: 'directory_unreadable' }); return; }
-      children.sort((a, b) => a.name.localeCompare(b.name));
+      children.sort((a, b) => b.name.localeCompare(a.name));
       for (const item of children) {
         if (stopped) break;
-        if (++entries > 20_000 || files.length >= MAX_FILES) { diagnostics.push({ code: 'scan_limit' }); stopped = true; break; }
+        if (++entries > 20_000) { diagnostics.push({ code: 'scan_limit' }); stopped = true; break; }
         const path = join(dir, item.name);
         if (item.isSymbolicLink()) continue;
         if (item.isDirectory()) await walk(path, depth + 1);
-        else if (item.isFile() && decoder.accepts(path)) files.push(path);
+        else if (item.isFile() && decoder.accepts(path)) {
+          result.scan.discoveredFiles++;
+          try {
+            const stat = await lstat(path);
+            if (!stat.isFile()) continue;
+            const inWindow = this.environment.agent === 'codex' && inDateWindow(relative(root, path), from, to);
+            // Native append-written logs cannot acquire new events without an mtime update.
+            // Do not reject mtime >= to: those files can still contain events in range.
+            if (q.scanMode !== 'full' && stat.mtimeMs < from && !inWindow) { result.scan.skippedBeforeRange++; continue; }
+            candidates.push({ path, modified: stat.mtimeMs, inWindow });
+          } catch { diagnostics.push({ file: relative(root, path), code: 'file_unreadable' }); }
+        }
       }
     };
     await walk(root, 0);
-    if (!files.length) diagnostics.push({ code: 'no_supported_files' });
+    if (!result.scan.discoveredFiles) diagnostics.push({ code: 'no_supported_files' });
+    candidates.sort((a, b) => Number(b.inWindow) - Number(a.inWindow) || b.modified - a.modified || a.path.localeCompare(b.path));
+    result.scan.candidateFiles = candidates.length;
+    if (candidates.length > this.limits.maxFiles) diagnostics.push({ code: 'scan_limit' });
+    const files = candidates.slice(0, this.limits.maxFiles).map(f => f.path);
     let scanBytes = 0;
     const allIntervals: [number, number][] = [];
     for (const path of files) {
@@ -75,9 +105,11 @@ export class LocalSessionAdapter implements SessionAdapter {
         handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
         const stat = await handle.stat();
         if (!stat.isFile() || stat.nlink !== 1) { diagnostics.push({ file, code: 'unsupported_file' }); continue; }
-        if (stat.size > MAX_FILE_BYTES) { diagnostics.push({ file, code: 'file_size_limit' }); continue; }
-        if (scanBytes + stat.size > MAX_SCAN_BYTES) { diagnostics.push({ code: 'byte_limit' }); break; }
+        if (stat.size > this.limits.maxFileBytes) { diagnostics.push({ file, code: 'file_size_limit' }); continue; }
+        if (scanBytes + stat.size > this.limits.maxScanBytes) { diagnostics.push({ file, code: 'byte_limit' }); continue; }
         scanBytes += stat.size;
+        result.scan.readFiles++;
+        result.scan.bytesRead = scanBytes;
         if (!stat.size) continue;
         // Fixed end prevents reading our own newly appended output indefinitely.
         const lines = createInterface({ input: handle.createReadStream({ end: stat.size - 1, autoClose: false }), crlfDelay: Infinity });
@@ -130,7 +162,7 @@ export class LocalSessionAdapter implements SessionAdapter {
               const start = turns.get(turnId)?.start ?? iso(t.start);
               const end = iso(t.end) ?? timestamp;
               if (start && end >= start) turns.set(turnId, { id: turnId, start, end, status: t.state, elapsedMs: Date.parse(end) - Date.parse(start) });
-              else diagnostics.push({ file, code: 'unmatched_turn_end' });
+              else if (Date.parse(timestamp) >= from && Date.parse(timestamp) < to) diagnostics.push({ file, code: 'unmatched_turn_end' });
               if (currentTurn === turnId) currentTurn = null;
             }
           }

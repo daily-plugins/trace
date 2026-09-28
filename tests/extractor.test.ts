@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { LocalSessionAdapter, bounds, unionMs } from '../src/extractor.js';
@@ -136,4 +136,58 @@ test('pagination is stable on unchanged files, and IDs differ between environmen
 test('query validation rejects ambiguous dates and invalid pagination', () => {
   for (const q of [{ from: '' }, { from: '2026-09-28' }, { from: at(2), to: at(1) }, { limit: 0 }, { limit: 1001 }, { offset: -1 }]) assert.throws(() => bounds(q));
   assert.equal(unionMs([[0, 10], [5, 15], [20, 30]]), 25);
+});
+
+test('today query prunes unchanged archives before byte/file limits while retaining resumed old sessions', async t => {
+  const f = await fixture(t, 'codex', [meta, msg('user', 1, 'today')], '2026/09/28/today.jsonl');
+  await utimes(f.file, new Date(at(2)), new Date(at(2)));
+  for (let i = 0; i < 5; i++) {
+    const old = join(f.root, `2025/01/01/old-${i}.jsonl`);
+    await mkdir(dirname(old), { recursive: true });
+    await writeFile(old, 'x'.repeat(2000)); // Each would exceed the per-file limit if opened.
+    await utimes(old, new Date('2025-01-01T00:00:00Z'), new Date('2025-01-01T00:00:00Z'));
+  }
+  const resumed = join(f.root, '2025/01/01/resumed.jsonl');
+  await writeFile(resumed, [{ ...meta, payload: { id: 'resumed' } }, msg('user', 3, 'resumed today')].map(r => JSON.stringify(r)).join('\n'));
+  await utimes(resumed, new Date(at(4)), new Date(at(4)));
+  const r = await new LocalSessionAdapter({ name: 'test', agent: 'codex', root: f.root }, { maxFiles: 2, maxFileBytes: 1000, maxScanBytes: 1500 }).extract({ from: at(0), to: at(5) });
+  assert.equal(r.incomplete, false);
+  assert.deepEqual(new Set(r.sessions.map(s => s.id)), new Set(['session-a', 'resumed']));
+  assert.equal(r.scan.skippedBeforeRange, 5); assert.equal(r.scan.readFiles, 2);
+  assert.equal(r.scan.candidateFiles, 2); assert.equal(r.events.length, 2);
+});
+
+test('KST date boundaries retain prior UTC day files and files updated after query end', async t => {
+  const stamp = '2026-09-27T16:00:00Z';
+  const f = await fixture(t, 'codex', [{ ...meta, timestamp: stamp }, { ...msg('user', 1, 'KST morning'), timestamp: stamp }], '2026/09/27/prior-utc-day.jsonl');
+  await utimes(f.file, new Date('2026-09-30T00:00:00Z'), new Date('2026-09-30T00:00:00Z'));
+  const r = await f.adapter.extract({ from: '2026-09-28T00:00:00+09:00', to: '2026-09-28T22:14:00+09:00' });
+  assert.equal(r.events.length, 1); assert.equal(r.incomplete, false);
+});
+
+test('date-window files outrank unrelated recently modified files under a byte budget', async t => {
+  const f = await fixture(t, 'codex', [meta, msg('user', 1, 'today')], '2026/09/28/today.jsonl');
+  const old = join(f.root, '2025/01/01/old.jsonl'); await mkdir(dirname(old), { recursive: true });
+  await writeFile(old, [meta, msg('user', 1, 'x'.repeat(700))].map(r => JSON.stringify(r)).join('\n'));
+  await utimes(old, new Date('2026-09-30T00:00:00Z'), new Date('2026-09-30T00:00:00Z'));
+  const r = await new LocalSessionAdapter({ name: 'test', agent: 'codex', root: f.root }, { maxScanBytes: 1100 }).extract({ from: at(0), to: at(5) });
+  assert.equal(r.events.length, 1); assert.equal(r.events[0]?.evidence.file, '2026/09/28/today.jsonl');
+  assert.equal(r.incomplete, true); assert.equal(r.diagnostics.some(d => d.code === 'byte_limit'), true);
+});
+
+test('unchanged old archives are complete empty results, and unbounded scans still inspect them', async t => {
+  const f = await fixture(t, 'codex', [meta], '2025/01/01/old.jsonl');
+  await utimes(f.file, new Date('2025-01-01T00:00:00Z'), new Date('2025-01-01T00:00:00Z'));
+  const bounded = await f.adapter.extract({ from: at(0), to: at(5) });
+  assert.equal(bounded.incomplete, false); assert.equal(bounded.scan.readFiles, 0);
+  assert.equal((await f.adapter.extract()).scan.readFiles, 1);
+  const full = await f.adapter.extract({ from: at(0), to: at(5), scanMode: 'full' });
+  assert.equal(full.scan.readFiles, 1); assert.equal(full.scan.skippedBeforeRange, 0);
+  assert.equal(full.scan.strategy, 'full');
+});
+
+test('old unmatched turn endings in a resumed session do not taint the queried range', async t => {
+  const f = await fixture(t, 'codex', [meta, turn('task_complete', 0), msg('user', 3, 'today')]);
+  const r = await f.adapter.extract({ from: at(2), to: at(5) });
+  assert.equal(r.events.length, 1); assert.equal(r.incomplete, false);
 });

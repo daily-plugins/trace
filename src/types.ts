@@ -32,6 +32,7 @@ export interface Session {
   counts: Record<ActivityEvent['kind'], number>;
 }
 export interface Query {
+  scanMode?: 'auto' | 'full';
   from?: string;
   to?: string;
   sessionId?: string;
@@ -44,6 +45,7 @@ export interface Extraction {
   source: Agent;
   environment: string;
   root: string;
+  scan: { strategy: 'mtime-assisted' | 'full'; discoveredFiles: number; skippedBeforeRange: number; candidateFiles: number; readFiles: number; bytesRead: number };
   range: { from: string | null; to: string | null };
   sessions: Session[];
   events: (ActivityEvent & { sessionId: string })[];

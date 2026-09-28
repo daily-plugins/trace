@@ -11,11 +11,11 @@ pinned config path. It exposes the same tools and selection rules.
 `list_environments({})` returns registered names, agent types, roots, and adapter
 capabilities. It reads configuration only and never scans session directories.
 
-`list_local_sessions({environment, from?, to?, sessionId?})` returns session
+`list_local_sessions({environment, from?, to?, sessionId?, scanMode?})` returns session
 metadata, per-kind event counts, timing metrics, and scan diagnostics. No text or
 event page is included. Up to 1,000 source files can be examined in one scan.
 
-`extract_local_events({environment, from?, to?, sessionId?, includeText?, limit?, offset?})`
+`extract_local_events({environment, from?, to?, sessionId?, scanMode?, includeText?, limit?, offset?})`
 returns the same metadata plus a page of normalized events. `includeText` defaults
 to false, `limit` to 100 (1–1,000), and `offset` to zero. `nextOffset: null` means
 there are no further events among the scanned results, not necessarily complete
@@ -76,6 +76,24 @@ as an existing agent just because the model provider is the same.
 
 ## Limits and diagnostics
 
+`scanMode` defaults to `auto`. It examines directory entries and file metadata
+first, skipping files whose mtime is before `from`, except Codex date folders
+overlapping the query (with one-day timezone padding). It prioritizes those date
+folders, then newest mtime, before applying file and byte budgets. An old folder
+with recently appended activity remains a candidate. Files modified after `to`
+remain candidates because they can contain earlier events. A file that cannot
+fit the remaining byte budget is reported and skipped; smaller files can still
+be read. Unmatched turn endings outside the query range do not taint that range.
+
+This optimization assumes native logs update mtime when appending events; it is
+not a content index. Restored/imported archives with unreliable or deliberately
+preserved mtimes should use `scanMode: "full"` (CLI `--scan-mode full`), disabling
+mtime pruning while retaining priorities and resource limits. Narrow the root
+for archives larger than the budget. `scan.strategy`, `discoveredFiles`,
+`skippedBeforeRange`, `candidateFiles`, `readFiles`, and `bytesRead` make scope
+visible. A nonempty archive with zero candidates can return a complete empty
+result under the native-log mtime assumption.
+
 One scan examines at most 1,000 matching files, 20,000 directory entries, depth
 10, 64 MiB per file, and 256 MiB total file bytes. A file is stopped at 100,000
 decoded events; a scan stops after a file brings retained events to 100,000.
@@ -84,8 +102,9 @@ Snapshots are per-file, not an atomic snapshot across all sessions.
 
 Symlinks are not followed during traversal; hard-linked files are rejected.
 These checks are for trusted local directories, not isolation from a hostile
-process replacing parent directories during a scan. Limits apply before date or
-session filtering. Use a narrower registered root for larger archives.
+process replacing parent directories during a scan. Directory limits apply to
+discovery; file/byte limits apply to eligible candidates before event timestamp
+and session filtering. Use a narrower registered root for larger archives.
 
 `incomplete: true` accompanies diagnostics for unavailable roots, unreadable
 files/directories, size/count/depth limits, malformed JSONL (including a partial

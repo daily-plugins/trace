@@ -23,6 +23,7 @@ Run through: npm run trace -- <command> [options]
   --include-text       Include message text (up to 4,000 chars per event)
   --limit N            Event page size, 1..1000 (default 100)
   --offset N           Event offset (default 0)
+  --scan-mode MODE     auto (native log mtimes) | full (imported/preserved mtimes)
 
 Source files are read-only. No environment is scanned automatically.
 Agent execution duration is unavailable when the format lacks turn boundaries.
@@ -34,6 +35,7 @@ try {
     config: { type: 'string' }, environment: { type: 'string' }, agent: { type: 'string' }, replace: { type: 'boolean' },
     root: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, session: { type: 'string' },
     'include-text': { type: 'boolean' }, limit: { type: 'string' }, offset: { type: 'string' }, help: { type: 'boolean' },
+    'scan-mode': { type: 'string' },
   } });
   const command = positionals[0];
   const path = values.config ? expandRoot(values.config) : configPath();
@@ -51,7 +53,10 @@ try {
     else if (command === 'sessions' || command === 'extract') {
       if (values.root || values.agent || values.replace) throw new Error('Use setup to configure an environment; extraction only accepts registered environments.');
       const environment = selectEnvironment(await loadConfig(path), values.environment);
+      const scanMode = values['scan-mode'];
+      if (scanMode !== undefined && scanMode !== 'auto' && scanMode !== 'full') throw new Error('scan-mode must be auto or full.');
       const result = await new LocalSessionAdapter(environment).extract({
+        scanMode,
         from: values.from, to: values.to, sessionId: values.session,
         includeText: command === 'extract' && values['include-text'],
         limit: values.limit === undefined ? undefined : Number(values.limit), offset: values.offset === undefined ? undefined : Number(values.offset),

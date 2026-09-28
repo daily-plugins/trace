@@ -112,8 +112,13 @@ outputs, thinking blocks, and native system/developer messages are excluded;
 arbitrary user/assistant text remains untrusted data.
 
 Scans are bounded and report `incomplete`/`diagnostics`; a limit is not evidence
-that no other activity exists. The directory tree is not filtered by file dates,
-so resumed old sessions remain discoverable. See the guide for resource limits.
+that no other activity exists. Auto scans skip logs last modified before `from`,
+except Codex folders near the requested dates. Date-window files are read first,
+then recently modified files, retaining old sessions resumed during the period.
+`scan` reports candidate, skipped, read-file and byte counts. This assumes native
+logs update mtime when events are appended. For imported archives with preserved
+or unreliable mtimes, use `--scan-mode full` (MCP: `scanMode: "full"`) and a narrow
+root if necessary. See the guide for resource limits.
 There is no background collector, persistent index, remote session retrieval,
 email/browser integration, or automatic summarizer yet.
 
