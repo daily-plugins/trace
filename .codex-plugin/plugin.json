@@ -1,18 +1,18 @@
 {
   "name": "trace",
   "version": "0.1.0",
-  "description": "Trace plugin",
+  "description": "Extract local Codex, Claude Code, and Antigravity sessions from explicitly selected environments.",
   "author": {
-    "name": "Local developer"
+    "name": "Daily Plugins"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Trace",
-    "shortDescription": "Use Trace in Codex.",
-    "longDescription": "Trace adds a local Codex plugin scaffold.",
-    "developerName": "Local developer",
+    "displayName": "trace",
+    "shortDescription": "Extract local agent activity with source evidence.",
+    "longDescription": "Register local agent environments and extract time-filtered session activity with file and line references.",
+    "developerName": "Daily Plugins",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "Help me use Trace."
+    "defaultPrompt": "Help me select a configured environment and review its local agent sessions."
   }
 }
