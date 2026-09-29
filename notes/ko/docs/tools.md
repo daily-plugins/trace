@@ -167,3 +167,41 @@ npm run trace -- git-activity --repository project \
 공식 참고: [Git log](https://git-scm.com/docs/git-log),
 [Git status porcelain](https://git-scm.com/docs/git-status#_porcelain_format_version_1),
 [Git diff](https://git-scm.com/docs/git-diff).
+
+## 저장소 자동 탐색 (CLI)
+
+`trace discover-git --root PATH [--register] [--max-depth N]
+[--max-entries N] [--max-repositories N] [--config PATH]`로 지정한 상위 폴더 아래의
+Git 작업 트리를 찾습니다. `--root`는 필수이며 홈이나 컴퓨터 전체를 임의로 탐색하지
+않습니다. 루트 자체도 깊이 0에서 검사합니다. `.git` 디렉터리와 일반 `.git` 파일
+(worktree 및 초기화된 submodule 포함)을 Git으로 검증합니다. bare 저장소는 등록하지
+않으며 중첩 저장소도 탐색합니다.
+
+기본 `preview`는 설정을 쓰지 않습니다. `--register`는 기존 설정 잠금 안에서 한 번에
+원자적으로 등록하며 에이전트 환경과 기존 저장소를 보존합니다. 이미 등록된 실제 경로는
+`existing`으로 표시합니다. 새 이름은 폴더명을 소문자와 허용 문자로 변환하고 충돌하면
+`-2`, `-3` 등을 붙입니다. 사용할 문자가 없으면 `repository`를 사용합니다. 미리보기
+이후 설정이 바뀌면 최종 이름도 달라질 수 있습니다. 기존 등록을 덮어쓰지 않습니다.
+
+결과에는 `root`, `mode`, `repositories`(name/root/status), `discovered`, `added`,
+`scan`, `incomplete`, 경로별 `diagnostics`가 있습니다. 상태는 미리보기의 `new`, 등록
+후의 `registered`, 기존의 `existing`입니다. 미리보기의 added는 0입니다. 제한 도달이나
+접근 불가·잘못된 Git 루트는 불완전 결과와 종료 코드 2로 표시합니다. **--register라면
+그때까지 찾은 유효한 저장소는 등록합니다.** 잘못된 인자·루트·설정 또는 설정 잠금은
+종료 코드 1이며 설정을 일부만 쓰는 일은 없습니다.
+
+기본 제한은 깊이 8(최대 30), 디렉터리 항목 20,000개(최대 100,000), 저장소 100개
+(최대 1,000), 탐색 시간 예산 30초입니다. 파일시스템/Git 작업 사이에 시간을 확인하므로
+진행 중인 Git 검증에 최대 10초가 추가될 수 있고 파일시스템 호출은 강제 시간 제한이
+없습니다. 원자적 파일시스템 스냅샷도 아닙니다. 심볼릭 링크 하위 항목과 `.git`,
+`node_modules`, `.cache`, `.Trash`, `Library`, `.venv`, `venv`, `__pycache__`, `dist`,
+`build`, `vendor`는 건너뜁니다. `.github` 같은 다른 숨김 폴더는 포함합니다. 제외 폴더는
+의도적인 범위 제한이므로 오류로 표시하지 않습니다. 해당 폴더를 직접 루트로 선택하면
+탐색할 수 있습니다. `.git` 심볼릭 링크는 진단하고 등록하지 않습니다. 신뢰하는 로컬
+트리를 위한 규칙이며 다른 프로세스의 악의적인 경로 교체를 격리하지 않습니다.
+탐색 시 파일 본문이나 커밋 이력을 추출하지 않습니다.
+
+탐색·등록은 CLI 전용이고 MCP는 읽기 전용입니다. 터널의 고정 설정 파일이 기본 CLI
+설정과 다를 수 있으므로 `--config` 또는 `TRACE_CONFIG`로 선택하세요. 요청마다 설정을
+다시 읽으므로 등록 후 터널 재시작은 필요 없습니다. 자동 재탐색, 오래된 등록 삭제,
+백그라운드 감시는 하지 않습니다.

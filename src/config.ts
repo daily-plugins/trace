@@ -1,6 +1,6 @@
 import { mkdir, open, readFile, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { validateRepository } from './git.js';
@@ -59,6 +59,17 @@ export function selectRepository(config: Config, name?: string): Repository {
   return repository;
 }
 async function saveRegistration<T extends Repository>(env: T, kind: 'environments' | 'repositories', path: string, replace: boolean): Promise<T> {
+  return updateConfig(path, config => {
+    const entries: Repository[] = config[kind] ?? [];
+    const exists = entries.some(e => e.name === env.name);
+    if (exists && !replace) throw new Error('Registration already exists. Use --replace to update it.');
+    const updated = [...entries.filter(e => e.name !== env.name), env];
+    if (kind === 'environments') config.environments = updated as Environment[];
+    else config.repositories = updated;
+    return env;
+  });
+}
+async function updateConfig<T>(path: string, update: (config: Config) => T | Promise<T>): Promise<T> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   // Exclusive setup lock prevents two concurrent registrations from losing updates.
   const lockPath = `${path}.lock`;
@@ -68,19 +79,37 @@ async function saveRegistration<T extends Repository>(env: T, kind: 'environment
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     const config = await loadConfig(path);
-    const entries: Repository[] = config[kind] ?? [];
-    const exists = entries.some(e => e.name === env.name);
-    if (exists && !replace) throw new Error('Registration already exists. Use --replace to update it.');
-    const updated = [...entries.filter(e => e.name !== env.name), env];
-    if (kind === 'environments') config.environments = updated as Environment[];
-    else config.repositories = updated;
+    const result = await update(config);
     const file = await open(temporary, 'wx', 0o600);
     try { await file.writeFile(`${JSON.stringify(config, null, 2)}\n`); }
     finally { await file.close(); }
     await rename(temporary, path);
-    return env;
+    return result;
   } finally {
     await unlink(temporary).catch(() => {});
     await lock.close(); await unlink(lockPath);
   }
+}
+
+// The caller supplies canonical roots validated by the bounded discovery pass.
+export async function planDiscoveredRepositories(roots: string[], path = configPath(), register = false) {
+  const plan = async (config: Config) => {
+    const entries = [...(config.repositories ?? [])];
+    const canonical = new Map<string, Repository>();
+    for (const entry of entries) canonical.set(await realpath(entry.root).catch(() => entry.root), entry);
+    const names = new Set(entries.map(e => e.name));
+    const added: Repository[] = []; const existing: Repository[] = [];
+    for (const root of [...new Set(roots)].sort()) {
+      const prior = canonical.get(root);
+      if (prior) { existing.push(prior); continue; }
+      const base = basename(root).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 54) || 'repository';
+      let name = base; let suffix = 2;
+      while (names.has(name)) name = `${base}-${suffix++}`;
+      const entry = repositorySchema.parse({ name, root });
+      names.add(name); canonical.set(root, entry); entries.push(entry); added.push(entry);
+    }
+    config.repositories = entries;
+    return { added, existing };
+  };
+  return register ? updateConfig(path, plan) : plan(await loadConfig(path));
 }

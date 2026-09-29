@@ -151,3 +151,17 @@ adds current tracked/staged changes; their change time is unknown and they are
 not date-filtered. `--include-patch` opts into bounded diffs. Untracked files are
 excluded. There is no background collection or snapshot storage. Git 2.37+ is
 required; see [limits and output semantics](docs/tools.md#git-file-activity).
+
+Discover repositories beneath an explicitly selected parent directory:
+
+```sh
+npm run trace -- discover-git --root /absolute/path/to/projects
+npm run trace -- discover-git --root /absolute/path/to/projects --register
+```
+
+The first command previews; `--register` adds discovered Git working trees in
+one configuration update. Existing paths/names are preserved; duplicate folder
+names receive numeric suffixes. Both `.git` directories and worktree `.git`
+files are detected. This is a one-time scan, not a background watcher. For a
+tunnel, select its pinned configuration using `--config /path/to/config.json`.
+See [discovery limits](docs/tools.md#repository-discovery-cli).

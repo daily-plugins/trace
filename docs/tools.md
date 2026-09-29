@@ -188,3 +188,46 @@ tool metadata to discover it. Tests use temporary synthetic repositories.
 References: [Git log](https://git-scm.com/docs/git-log),
 [Git status porcelain](https://git-scm.com/docs/git-status#_porcelain_format_version_1),
 [Git diff](https://git-scm.com/docs/git-diff).
+
+## Repository discovery (CLI)
+
+`trace discover-git --root PATH [--register] [--max-depth N]
+[--max-entries N] [--max-repositories N] [--config PATH]` finds Git working trees
+under an explicitly selected parent. `--root` is required; no whole-machine or
+home-directory scan is implicit. Root depth is zero and the root itself is
+checked. Both `.git` directories and regular `.git` files (including linked
+worktrees and initialized submodules) must pass Git root validation. Bare
+repositories are not registered. Nested repositories are also discovered.
+
+Default mode is `preview`, with no configuration writes. `--register` atomically
+adds discovered roots under the existing configuration lock, preserving all
+agent environments and repository registrations. Existing canonical paths are
+returned as `existing`. New names derive from lowercase folder names, restricted
+to the configuration alphabet, with `-2`, `-3`, etc. on collision. Names with no
+usable characters become `repository`. Preview names may change if the config
+changes before registration. This command never replaces registrations.
+
+The response includes `root`, `mode`, `repositories` (name/root/status),
+`discovered`, `added`, `scan`, `incomplete`, and path-specific `diagnostics`.
+Statuses are `new` in preview, `registered` after addition, or `existing`.
+`added` is zero in preview. Limits or inaccessible/invalid Git roots mark the
+result incomplete (exit 2); **with --register, valid roots found so far are still
+registered**. Invalid arguments/root/configuration or a busy configuration lock
+exit 1 without a partial configuration write.
+
+Defaults: depth 8 (maximum 30), 20,000 entries (maximum 100,000), 100 repositories
+(maximum 1,000), and a 30-second discovery budget checked between filesystem/Git
+operations. An in-flight validation can take another 10 seconds; filesystem
+calls are not hard-timeout bounded. This is not an atomic filesystem snapshot.
+The scan skips symlink children and `.git`, `node_modules`, `.cache`, `.Trash`,
+`Library`, `.venv`, `venv`, `__pycache__`, `dist`, `build`, and `vendor` directories.
+Other hidden directories such as `.github` are included. Skipped directories are
+intentional scope exclusions, not errors; choose one as the explicit root to
+scan it. Symlink `.git` markers are diagnosed and not registered. These rules are
+for trusted local trees, not isolation from concurrent hostile path replacement.
+No file contents or commit history are extracted during discovery.
+
+Discovery is CLI-only; MCP remains read-only. A tunnel's pinned configuration
+may differ from the CLI default: pass its path using `--config` or `TRACE_CONFIG`.
+Requests reload configuration, so registration needs no tunnel restart. There is
+no automatic rescan, deletion of stale registrations, or background watcher.

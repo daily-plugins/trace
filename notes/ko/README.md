@@ -144,3 +144,16 @@ MCP 도구는 `extract_git_activity`입니다. HEAD에서 도달 가능한 일�
 `--include-patch`로 제한된 diff를 포함합니다. 미추적 파일은 제외하고 백그라운드
 수집이나 스냅샷 저장은 하지 않습니다. Git 2.37 이상이 필요합니다.
 [제한 및 출력 의미](docs/tools.md#git-파일-활동)를 참고하세요.
+
+지정한 상위 폴더 아래의 저장소를 자동으로 찾고 일괄 등록할 수 있습니다.
+
+```sh
+npm run trace -- discover-git --root /absolute/path/to/projects
+npm run trace -- discover-git --root /absolute/path/to/projects --register
+```
+
+기본은 미리보기이며 `--register`를 붙이면 발견한 Git 작업 트리를 한 번의 설정 갱신으로
+등록합니다. 기존 경로와 이름은 보존하고, 같은 폴더명은 숫자 접미사로 구분합니다.
+`.git` 디렉터리와 worktree의 `.git` 파일을 모두 찾습니다. 일회성 탐색이며 상시 감시는
+하지 않습니다. 터널에 등록하려면 `--config /path/to/config.json`으로 터널의 고정 설정
+파일을 선택하세요. [탐색 제한](docs/tools.md#저장소-자동-탐색-cli)을 참고하세요.
