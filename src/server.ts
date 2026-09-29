@@ -6,18 +6,22 @@ import { LocalSessionAdapter } from './extractor.js';
 import { extractGitActivity, gitQuerySchema } from './git.js';
 import { loadConfig, selectEnvironment, selectRepository } from './config.js';
 import { adapterCatalog } from './adapters.js';
+import { activityReviewPrompt, hostConversations, hostHistoryNote, serverInstructions } from './host.js';
 
-const server = new McpServer({ name: 'trace', version: '0.1.0' });
+const server = new McpServer({ name: 'trace', version: '0.1.0' }, { instructions: serverInstructions });
 const range = { environment: z.string(), from: z.string().optional(), to: z.string().optional(), sessionId: z.string().optional(), scanMode: z.enum(['auto', 'full']).default('auto') };
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 const failure = (e: unknown) => ({ isError: true, ...text({ error: e instanceof Error ? e.message : 'Extraction failed' }) });
 
 server.registerTool('trace_activity', {
-  description: 'DEFAULT for local activity, today summaries and work retrospectives: merges ALL registered agent environments and Git repositories into a timestamp-ordered timeline. Optional name arrays narrow each source type; [] excludes that type. Default range is last 24 hours ending now. Inactive sources are omitted; failed/partial sources remain visible as diagnostics. Current tracked Git changes are separate with unknown edit time. Text/patches opt-in. Read source diagnostics, incomplete and nextOffset; preserve returned range when paging. No work-duration inference or cross-source deduplication.',
+  description: 'DEFAULT for local activity, today summaries and work retrospectives: merges ALL registered agent environments and Git repositories into a timestamp-ordered timeline. Optional name arrays narrow each source type; [] excludes that type. Default range is last 24 hours ending now. Inactive sources are omitted; failed/partial sources remain visible as diagnostics. Current tracked Git changes are separate with unknown edit time. Text/patches opt-in. Read source diagnostics, incomplete and nextOffset; preserve returned range when paging. No work-duration inference or cross-source deduplication. ' + hostHistoryNote,
   inputSchema: timelineSchema.shape, annotations,
 }, async args => {
-  try { return text(await extractTimeline(await loadConfig(), args)); } catch (e) { return failure(e); }
+  try {
+    const result = await extractTimeline(await loadConfig(), args);
+    return text({ ...result, hostConversations: hostConversations(result.range) });
+  } catch (e) { return failure(e); }
 });
 server.registerTool('list_environments', {
   description: 'List configured local agent environments, Git repositories and supported adapters. Does not scan session files. For general activity queries use trace_activity across all registered sources by default.',
@@ -50,4 +54,8 @@ server.registerTool('extract_git_activity', {
 }, async ({ repository, ...query }) => {
   try { return text(await extractGitActivity(selectRepository(await loadConfig(), repository), query)); } catch (e) { return failure(e); }
 });
+server.registerPrompt('activity_review', {
+  description: 'Summarize activity for a period by combining Trace local sources with this host\'s own conversation history.',
+  argsSchema: { period: z.string().optional().describe('Period to review, e.g. "today" or "this week". Defaults to today.'), timezone: z.string().optional().describe('IANA timezone for period bounds, e.g. Asia/Seoul.') },
+}, ({ period, timezone }) => ({ messages: [{ role: 'user', content: { type: 'text', text: activityReviewPrompt(period, timezone) } }] }));
 await server.connect(new StdioServerTransport());

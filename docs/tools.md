@@ -274,3 +274,32 @@ concurrent source changes and budget-constrained reads can shift pages. A null
 nextOffset does not override incomplete diagnostics. Use source-specific tools
 for deeper retrieval after per-source limits. Git clones are not deduplicated by
 hash across repositories. No aggregate human work duration is inferred.
+
+## Host conversations
+
+Trace cannot read conversations held in the host application that calls it,
+such as ChatGPT or Claude on the web or desktop. MCP provides no channel for a
+server to read the host's chat history. Instead, Trace asks the host model to
+consult that history itself, in three places:
+
+- **Server instructions** (MCP `initialize`): describe the full flow. Hosts decide
+  whether and how to include server instructions in the model context.
+- **`trace_activity` description**: states that host conversations are excluded.
+- **`trace_activity` result**: MCP responses add `hostConversations`
+  `{includedInResult: false, range, note}`. The range equals the returned `range`.
+  The note is written as a coverage fact rather than a command, because models
+  may treat imperative text inside tool results as possible prompt injection.
+  CLI JSON output does not include this field.
+
+The prompt `activity_review({period?, timezone?})` returns one user message that
+asks the host to call `trace_activity`, review its own conversation history for
+the same period, and merge both with source labels. `period` defaults to
+`today`; without `timezone`, the message asks for the local timezone. Hosts that
+support MCP prompts expose it as a user-selected template; it does not run
+automatically.
+
+These are requests to the host model, not guarantees. Whether the host can search
+its own history depends on the service, plan, and user settings. Host history has
+no Trace file/line evidence and can overlap with local transcripts of the same
+work. Verify the combined behavior in each host; unit tests cover only the
+instructions, result field, and prompt that Trace returns.

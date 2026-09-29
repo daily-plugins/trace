@@ -78,6 +78,9 @@ npm run trace -- extract --environment work-codex \
 
 도구는 `trace_activity` (default), `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`입니다.
 통합 조회는 등록된 모든 소스를 사용하고 개별 조회에는 이름을 지정합니다. [도구 가이드](docs/tools.md)를 참고하세요.
+Trace는 자신을 호출한 호스트의 대화를 읽을 수 없습니다. 서버 instructions, `trace_activity`
+결과, `activity_review` 프롬프트가 호스트에 자기 채팅 기록을 검토해 Trace 결과와 합치도록
+요청합니다. [호스트 대화](docs/tools.md#호스트-대화)를 참고하세요.
 스킬과 개발용 매니페스트가 포함되어 있으며, 빌드 후 MCP를 직접 연결합니다.
 마켓플레이스 자동 설치와 HTTP는 아직 구현하지 않았습니다.
 비공개 터널은 `npm run tunnel:init`, `npm run tunnel:doctor`,

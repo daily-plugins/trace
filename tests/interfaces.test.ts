@@ -35,6 +35,22 @@ test('CLI registers each agent and requires environment selection; MCP uses the 
     const content = sessions.content as { type: string; text: string }[];
     assert.equal(JSON.parse(content[0]!.text).sessions[0].id, 'fixture');
     assert.equal(JSON.parse(content[0]!.text).events, undefined);
+    assert.match(client.getInstructions() ?? '', /own conversation history/);
+    const tools = (await client.listTools()).tools;
+    assert.match(tools.find(tool => tool.name === 'trace_activity')!.description!, /host's own conversations are not included/);
+    const activity = await client.callTool({ name: 'trace_activity', arguments: { from: '2026-09-28T00:00:00Z', to: '2026-09-29T00:00:00Z' } });
+    const activityResult = JSON.parse((activity.content as { text: string }[])[0]!.text);
+    assert.equal(activityResult.timeline[0].source, 'codex');
+    assert.deepEqual(activityResult.hostConversations.range, { from: '2026-09-28T00:00:00Z', to: '2026-09-29T00:00:00Z' });
+    assert.equal(activityResult.hostConversations.includedInResult, false);
+    assert.deepEqual((await client.listPrompts()).prompts.map(prompt => prompt.name), ['activity_review']);
+    const prompt = await client.getPrompt({ name: 'activity_review', arguments: { period: 'this week', timezone: 'Asia/Seoul' } });
+    const promptText = (prompt.messages[0]!.content as { text: string }).text;
+    assert.equal(prompt.messages[0]!.role, 'user');
+    assert.match(promptText, /what I did this week\. Use the Asia\/Seoul timezone/);
+    assert.match(promptText, /trace_activity/); assert.match(promptText, /conversation history in this app/);
+    const cliTimeline = JSON.parse(cli('timeline', '--from', '2026-09-28T00:00:00Z', '--to', '2026-09-29T00:00:00Z').stdout);
+    assert.equal(cliTimeline.hostConversations, undefined);
     const missing = await client.callTool({ name: 'extract_local_events', arguments: { environment: 'unregistered' } });
     assert.equal(missing.isError, true);
   } finally { await client.close(); }

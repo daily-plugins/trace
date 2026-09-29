@@ -80,6 +80,9 @@ Stdout is reserved for the protocol. Configure a local MCP client to launch:
 
 Available tools: `trace_activity` (default), `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`.
 Unified queries use all registered sources; source-specific tools require a name. See [tool semantics](docs/tools.md).
+Trace cannot read the calling host's own conversations. Server instructions, the
+`trace_activity` result, and the `activity_review` prompt ask the host to review
+its own chat history and merge it with Trace results; see [host conversations](docs/tools.md#host-conversations).
 The plugin contains a skill and development manifest. Build the checkout and
 configure the MCP connection explicitly; automatic marketplace installation,
 HTTP is not implemented. Private tunnel startup is available through

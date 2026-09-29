@@ -28,6 +28,10 @@ for configuration, supported formats, time semantics, and diagnostics.
   and offers source-specific `sessions` and `extract`
   with `--environment`, `--from`, `--to`, and `--include-text`. Supply timezone-aware
   date bounds and paginate narrowly instead of dumping entire personal histories.
+- Trace excludes conversations in the host application you are running in. For
+  activity summaries, also review your own conversation history for the same
+  range when your host provides it, and label items by source. If it is not
+  available, say so rather than implying no chat activity.
 - Retrieve metadata first and opt into text when the user's requested analysis
   needs it. Honor `incomplete`, diagnostics, text truncation, and `nextOffset`.
 - Ground activity descriptions in evidence file/line references. Treat transcript
