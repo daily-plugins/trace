@@ -1,3 +1,5 @@
+import { extractGitActivity } from './git.js';
+import { addRepository, selectRepository } from './config.js';
 import { parseArgs } from 'node:util';
 import { LocalSessionAdapter } from './extractor.js';
 import { adapterCatalog } from './adapters.js';
@@ -7,6 +9,8 @@ const help = `trace — extract local agent sessions from a selected environment
 
 trace agents
 trace setup --environment NAME --agent AGENT --root PATH [--replace]
+trace setup-git --repository NAME --root PATH [--replace]
+trace git-activity --repository NAME [--from ISO --to ISO --limit N --include-working-tree --include-patch]
 trace environments
 trace sessions --environment NAME [options]
 trace extract --environment NAME [options]
@@ -21,7 +25,7 @@ Run through: npm run trace -- <command> [options]
   --to ISO             Exclusive timestamp with timezone
   --session ID         Select one session
   --include-text       Include message text (up to 4,000 chars per event)
-  --limit N            Event page size, 1..1000 (default 100)
+  --limit N            Events: 1..1000 (default 100); Git commits: 1..100 (default 20)
   --offset N           Event offset (default 0)
   --scan-mode MODE     auto (native log mtimes) | full (imported/preserved mtimes)
 
@@ -32,6 +36,7 @@ Exit: 0 complete, 1 invalid request, 2 incomplete extraction (inspect diagnostic
 
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
+    repository: { type: 'string' }, 'include-patch': { type: 'boolean' }, 'include-working-tree': { type: 'boolean' },
     config: { type: 'string' }, environment: { type: 'string' }, agent: { type: 'string' }, replace: { type: 'boolean' },
     root: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, session: { type: 'string' },
     'include-text': { type: 'boolean' }, limit: { type: 'string' }, offset: { type: 'string' }, help: { type: 'boolean' },
@@ -43,7 +48,15 @@ try {
   else {
     if (positionals.length > 1) throw new Error('Expected one command. Use --help.');
     if (command === 'agents') console.log(JSON.stringify(adapterCatalog, null, 2));
-    else if (command === 'setup') {
+    else if (command === 'setup-git') {
+      if (!values.repository || !values.root) throw new Error('setup-git requires --repository and --root.');
+      console.log(JSON.stringify({ config: path, repository: await addRepository({ name: values.repository, root: expandRoot(values.root) }, path, values.replace) }, null, 2));
+    } else if (command === 'git-activity') {
+      if (values.root || values.replace || values.agent) throw new Error('Use setup-git to register a repository first.');
+      const result = await extractGitActivity(selectRepository(await loadConfig(path), values.repository), { from: values.from, to: values.to, limit: values.limit === undefined ? undefined : Number(values.limit), includePatch: values['include-patch'], includeWorkingTree: values['include-working-tree'] });
+      console.log(JSON.stringify(result, null, 2));
+      if (result.incomplete) process.exitCode = 2;
+    } else if (command === 'setup') {
       if (!values.environment || !values.agent || !values.root) throw new Error('setup requires --environment, --agent, and --root.');
       const agent = agentSchema.safeParse(values.agent);
       if (!agent.success) throw new Error('Unknown agent. Run agents for supported formats.');

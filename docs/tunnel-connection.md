@@ -2,7 +2,7 @@
 
 Trace supports OpenAI Secure MCP Tunnel on macOS/Linux. The official
 `tunnel-client` opens an outbound connection and launches Trace's local stdio
-server. No Trace HTTP server or inbound public port is needed. All three MCP
+server. No Trace HTTP server or inbound public port is needed. All four MCP
 tools retain their environment-selection rules. Returned session data is sent
 to the connected host when requested.
 

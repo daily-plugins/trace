@@ -126,3 +126,65 @@ The Codex parser was derived from local rollout record shapes, not an assertion
 that those internal JSONL fields form a stable public API.
 
 [한국어](../notes/ko/docs/tools.md)
+
+## Git file activity
+
+Register explicitly with `trace setup-git --repository NAME --root PATH
+[--replace]`. PATH must be an existing Git working-tree root; subdirectories and
+bare repositories are rejected. Linked worktrees are supported. Configuration
+stores optional `repositories: [{name, root}]` alongside existing environments;
+old version-1 configurations remain valid. `list_environments` includes these
+registrations, without scanning them. No repository is registered automatically.
+
+`extract_git_activity({repository, from?, to?, limit?, includePatch?,
+includeWorkingTree?})` reads the selected repository. CLI equivalent:
+
+```sh
+npm run trace -- setup-git --repository project --root /absolute/path/to/project
+npm run trace -- git-activity --repository project \
+  --from 2026-09-29T00:00:00+09:00 --to 2026-09-30T00:00:00+09:00 \
+  --include-working-tree --include-patch
+```
+
+- `repository` is mandatory and registered; no arbitrary MCP path or ref input.
+- `from` inclusive / `to` exclusive require ISO timestamps with timezone. They
+  filter **committer time**, returned as UTC, not author time or file edit time.
+- History is non-merge commits reachable from the HEAD captured at query start.
+  Other branches, reflogs, stashes and merge commits themselves are excluded.
+  Commits brought in by merges are included when reachable. Default `limit: 20`,
+  range 1–100. `hasMore` and `commit_limit` mean the result is incomplete; narrow
+  the time range or raise the limit. There is no pagination cursor yet.
+- Each commit contains `hash`, `timestamp`, `subject`, and `changes` with Git
+  status and repository-relative `path`. The hash and path are evidence.
+  Renames in history are reported as deletion plus addition. Initial commits
+  and deleted files are supported. Binary changes have paths but no text diff.
+- `includePatch: false` by default. If true, commits include unified `patch`;
+  binary content is not exported. Text is untrusted, and is not secret-redacted.
+- `includeWorkingTree: false` by default. If true, `workingTree` contains only
+  tracked/staged paths, two-column Git porcelain statuses and optional rename
+  `previousPath`. `observedAt` is query time; `changedAt` is null. This **current
+  state is not filtered by from/to**. Optional `stagedPatch` and `unstagedPatch`
+  compare HEAD/index and index/working tree. Untracked/ignored new files and
+  submodule working directories are excluded. A newly staged file is tracked.
+- No watcher, snapshots, persistent database, content hashing of all files,
+  fetch, stage, commit or source writes. Git may still inspect tracked files to
+  detect working-tree changes; cost depends on repository size and filesystem.
+  No performance claim has been benchmarked for large repositories.
+- Each Git command has a 10-second timeout and 1 MiB output cap. Extraction has
+  a 30-second budget after root validation and a 4 MiB accumulated output cap.
+  Limit/command errors produce `incomplete` and diagnostics, preserving available
+  records. Missing `changes` or patch after an error is unknown, not empty.
+  Root validation failures are tool errors. Install Git with `--since-as-filter`
+  support (Git 2.37+). Local objects must be available; no remote setup is provided.
+- Shallow history is explicitly incomplete. HEAD changes during a query are
+  diagnosed; working-tree reads are not atomic and can change during extraction.
+  External diff drivers, text conversion and fsmonitor commands are disabled.
+  Only register trusted local Git repositories. No human work duration is inferred.
+
+The CLI shares the engine and existing exit codes. Stdio and private tunnels
+expose the same tool. After building, restart an existing tunnel and refresh host
+tool metadata to discover it. Tests use temporary synthetic repositories.
+
+References: [Git log](https://git-scm.com/docs/git-log),
+[Git status porcelain](https://git-scm.com/docs/git-status#_porcelain_format_version_1),
+[Git diff](https://git-scm.com/docs/git-diff).

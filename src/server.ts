@@ -2,7 +2,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { LocalSessionAdapter } from './extractor.js';
-import { loadConfig, selectEnvironment } from './config.js';
+import { extractGitActivity, gitQuerySchema } from './git.js';
+import { loadConfig, selectEnvironment, selectRepository } from './config.js';
 import { adapterCatalog } from './adapters.js';
 
 const server = new McpServer({ name: 'trace', version: '0.1.0' });
@@ -12,7 +13,7 @@ const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSO
 const failure = (e: unknown) => ({ isError: true, ...text({ error: e instanceof Error ? e.message : 'Extraction failed' }) });
 
 server.registerTool('list_environments', {
-  description: 'List configured local agent environments and supported adapters. Does not scan session files. Ask the user which environment to use before extraction if not already specified.',
+  description: 'List configured local agent environments, Git repositories and supported adapters. Does not scan session files. Ask the user which environment to use before extraction if not already specified.',
   inputSchema: {}, annotations,
 }, async () => {
   try { return text({ ...await loadConfig(), adapters: adapterCatalog }); } catch (e) { return failure(e); }
@@ -35,5 +36,11 @@ server.registerTool('extract_local_events', {
     const adapter = new LocalSessionAdapter(selectEnvironment(await loadConfig(), args.environment));
     return text(await adapter.extract(args));
   } catch (e) { return failure(e); }
+});
+server.registerTool('extract_git_activity', {
+  description: 'Read registered Git repository HEAD history (non-merge commits) filtered by committer time [from,to). Returns commit hashes and changed paths; patches opt-in and untrusted. Optional tracked working-tree changes are current observations with unknown change time, NOT range-filtered. No untracked files, fetching or writes. Inspect incomplete/diagnostics; no human duration inference.',
+  inputSchema: { repository: z.string(), ...gitQuerySchema.shape }, annotations,
+}, async ({ repository, ...query }) => {
+  try { return text(await extractGitActivity(selectRepository(await loadConfig(), repository), query)); } catch (e) { return failure(e); }
 });
 await server.connect(new StdioServerTransport());

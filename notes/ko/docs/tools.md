@@ -113,3 +113,57 @@ Codex 파서는 로컬 rollout 레코드 형식을 기준으로 구현했으며,
 안정적인 공식 공개 API라고 주장하지 않습니다.
 
 [English](../../../docs/tools.md)
+
+## Git 파일 활동
+
+`trace setup-git --repository NAME --root PATH [--replace]`로 명시적으로 등록합니다.
+PATH는 기존 Git 작업 트리의 루트여야 합니다. 하위 폴더와 bare 저장소는 거부하고
+linked worktree는 지원합니다. 버전 1 설정에 선택 항목
+`repositories: [{name, root}]`를 추가하며 기존 환경 설정은 유지됩니다.
+`list_environments`에서 등록 목록을 조회할 수 있으며 자동 등록하지 않습니다.
+
+`extract_git_activity({repository, from?, to?, limit?, includePatch?, includeWorkingTree?})`
+와 CLI가 같은 구현을 사용합니다.
+
+```sh
+npm run trace -- setup-git --repository project --root /absolute/path/to/project
+npm run trace -- git-activity --repository project \
+  --from 2026-09-29T00:00:00+09:00 --to 2026-09-30T00:00:00+09:00 \
+  --include-working-tree --include-patch
+```
+
+- 등록한 `repository` 이름은 필수이며 MCP에서 임의 경로나 ref를 받지 않습니다.
+- `from` 포함, `to` 미포함이며 시간대가 있는 ISO 시각을 요구합니다. 작성자 시각이나
+  파일 수정 시각이 아닌 **committer 시각**으로 필터링하고 UTC로 반환합니다.
+- 조회 시작 시 HEAD에서 도달 가능한 일반 커밋을 조회합니다. 다른 브랜치, reflog,
+  stash, 병합 커밋 자체는 제외합니다. 병합으로 유입된 일반 커밋은 포함됩니다.
+  `limit`은 기본 20, 최대 100입니다. `hasMore`와 `commit_limit`은 불완전한 결과를
+  뜻합니다. 기간을 좁히거나 limit을 늘리세요. 페이지 커서는 아직 없습니다.
+- 커밋은 `hash`, `timestamp`, `subject`, `changes`를 반환합니다. changes의 Git 상태와
+  저장소 상대 `path`, 커밋 해시가 근거입니다. 이력의 이름 변경은 삭제+추가로 표현합니다.
+  최초 커밋과 삭제 파일도 지원합니다. 바이너리는 경로만 기록하며 내용 diff는 없습니다.
+- `includePatch`는 기본 false입니다. true이면 unified `patch`를 반환합니다.
+  바이너리 내용은 내보내지 않습니다. 텍스트는 신뢰할 수 없는 데이터이며 비밀을 자동 제거하지 않습니다.
+- `includeWorkingTree`는 기본 false입니다. true이면 추적 또는 stage된 파일만
+  `workingTree.changes`에 Git porcelain 두 칸 상태 코드와 경로로 반환합니다.
+  이름 변경은 `previousPath`도 포함합니다. `observedAt`은 조회 시각이고 `changedAt`은
+  null입니다. **현재 상태에는 from/to 필터가 적용되지 않습니다.** 선택적
+  `stagedPatch`와 `unstagedPatch`는 각각 HEAD/index, index/작업 트리를 비교합니다.
+  미추적·무시된 새 파일과 서브모듈 작업 디렉터리는 제외합니다. 새로 stage한 파일은 포함합니다.
+- watcher, 스냅샷, DB, 전체 내용 해시, fetch, stage, commit, 원본 쓰기는 없습니다.
+  작업 트리 변경을 찾기 위해 Git이 추적 파일을 확인할 수 있으므로 비용은 저장소 규모와
+  파일시스템에 따라 다릅니다. 대규모 성능 벤치마크는 아직 수행하지 않았습니다.
+- Git 명령당 10초/출력 1 MiB, 루트 검증 이후 전체 조회 30초/누적 출력 4 MiB로
+  제한합니다. 제한이나 명령 오류는 확보한 기록을 유지하며 `incomplete`와 diagnostics로
+  알립니다. 오류로 changes나 patch가 없는 것은 변경 없음이 아닙니다. 루트 검증 실패는
+  도구 오류입니다. `--since-as-filter`를 지원하는 Git 2.37 이상과 로컬 객체가 필요합니다.
+- shallow 이력은 불완전으로 표시하고 조회 중 HEAD 변경도 진단합니다. 작업 트리 조회는
+  원자적 스냅샷이 아닙니다. 외부 diff, text conversion, fsmonitor 명령을 비활성화합니다.
+  신뢰하는 로컬 저장소만 등록하세요. 작업 시간은 추정하지 않습니다.
+
+기존 CLI 종료 코드를 따릅니다. stdio와 터널에 동일한 도구가 노출됩니다. 빌드 후 기존
+터널을 재시작하고 호스트 도구 목록을 갱신해야 합니다. 임시 합성 저장소로 테스트합니다.
+
+공식 참고: [Git log](https://git-scm.com/docs/git-log),
+[Git status porcelain](https://git-scm.com/docs/git-status#_porcelain_format_version_1),
+[Git diff](https://git-scm.com/docs/git-diff).

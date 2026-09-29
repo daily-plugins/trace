@@ -78,7 +78,7 @@ Stdout is reserved for the protocol. Configure a local MCP client to launch:
 }
 ```
 
-Available tools: `list_environments`, `list_local_sessions`, `extract_local_events`.
+Available tools: `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`.
 Extraction tools require an environment name. See [tool semantics](docs/tools.md).
 The plugin contains a skill and development manifest. Build the checkout and
 configure the MCP connection explicitly; automatic marketplace installation,
@@ -134,3 +134,20 @@ Codex and Antigravity parser shapes were also inspected locally; Claude Code has
 fixture coverage, not a live installation verification in this workspace.
 
 [한국어](notes/ko/README.md)
+
+## Git file tracking
+
+Register a Git working-tree root separately from agent environments:
+
+```sh
+npm run trace -- setup-git --repository project --root /absolute/path/to/project
+npm run trace -- git-activity --repository project \
+  --from 2026-09-29T00:00:00+09:00 --to 2026-09-30T00:00:00+09:00
+```
+
+MCP tool: `extract_git_activity`. It returns HEAD-reachable non-merge commit
+history and changed paths using committer timestamps. `--include-working-tree`
+adds current tracked/staged changes; their change time is unknown and they are
+not date-filtered. `--include-patch` opts into bounded diffs. Untracked files are
+excluded. There is no background collection or snapshot storage. Git 2.37+ is
+required; see [limits and output semantics](docs/tools.md#git-file-activity).

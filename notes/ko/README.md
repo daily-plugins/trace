@@ -76,7 +76,7 @@ npm run trace -- extract --environment work-codex \
 }
 ```
 
-도구는 `list_environments`, `list_local_sessions`, `extract_local_events`입니다.
+도구는 `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`입니다.
 추출 시 환경 이름을 반드시 지정합니다. [도구 가이드](docs/tools.md)를 참고하세요.
 스킬과 개발용 매니페스트가 포함되어 있으며, 빌드 후 MCP를 직접 연결합니다.
 마켓플레이스 자동 설치와 HTTP는 아직 구현하지 않았습니다.
@@ -127,3 +127,20 @@ Codex·Antigravity는 로컬 기록 형식을 확인했고, Claude Code는 이 �
 설치본을 검증하지 못했으므로 합성 fixture 검증 범위입니다.
 
 [English](../../README.md)
+
+## Git 파일 추적
+
+에이전트 환경과 별도로 Git 작업 트리 루트를 등록합니다.
+
+```sh
+npm run trace -- setup-git --repository project --root /absolute/path/to/project
+npm run trace -- git-activity --repository project \
+  --from 2026-09-29T00:00:00+09:00 --to 2026-09-30T00:00:00+09:00
+```
+
+MCP 도구는 `extract_git_activity`입니다. HEAD에서 도달 가능한 일반 커밋의 이력과
+변경 경로를 committer 시각 기준으로 조회합니다. `--include-working-tree`는 현재
+추적/stage된 변경도 반환하지만 수정 시각을 모르므로 기간 필터를 적용하지 않습니다.
+`--include-patch`로 제한된 diff를 포함합니다. 미추적 파일은 제외하고 백그라운드
+수집이나 스냅샷 저장은 하지 않습니다. Git 2.37 이상이 필요합니다.
+[제한 및 출력 의미](docs/tools.md#git-파일-활동)를 참고하세요.
