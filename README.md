@@ -78,8 +78,8 @@ Stdout is reserved for the protocol. Configure a local MCP client to launch:
 }
 ```
 
-Available tools: `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`.
-Extraction tools require an environment name. See [tool semantics](docs/tools.md).
+Available tools: `trace_activity` (default), `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`.
+Unified queries use all registered sources; source-specific tools require a name. See [tool semantics](docs/tools.md).
 The plugin contains a skill and development manifest. Build the checkout and
 configure the MCP connection explicitly; automatic marketplace installation,
 HTTP is not implemented. Private tunnel startup is available through
@@ -165,3 +165,18 @@ names receive numeric suffixes. Both `.git` directories and worktree `.git`
 files are detected. This is a one-time scan, not a background watcher. For a
 tunnel, select its pinned configuration using `--config /path/to/config.json`.
 See [discovery limits](docs/tools.md#repository-discovery-cli).
+
+## Default unified query
+
+```sh
+npm run trace -- --config .local/trace-config.json \
+  --from 2026-09-29T00:00:00+09:00 --to 2026-09-30T00:00:00+09:00
+```
+
+No command, `timeline`, and `extract` without `--environment` query all registered
+agent environments and Git repositories. MCP uses `trace_activity` by default.
+Omitting dates selects the last 24 hours, not the local calendar day. Results
+merge timestamped events in ascending order; current tracked Git changes are
+separate. Inactive sources are omitted. Failed/partial sources retain diagnostics.
+Use `--no-working-tree` to omit current changes. Text and patches remain opt-in.
+See [unified query semantics](docs/tools.md#unified-activity-default).

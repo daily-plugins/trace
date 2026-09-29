@@ -4,7 +4,8 @@
   to the next task. Do not push without a user request.
 - Keep user-facing documentation in English with corresponding Korean files
   under `notes/ko`. Keep `docs/tools.md`, README, and MCP metadata aligned.
-- Require an explicitly selected registered environment. Keep format decoding
+- Unified activity queries default to all explicitly registered sources; single-source
+  queries require a registered name. Keep format decoding
   separate from scanning, metrics, CLI, and MCP; do not add provider assumptions
   to the shared extraction engine.
 - Treat session stores as read-only. Never commit real transcripts, configuration,

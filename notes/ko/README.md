@@ -76,8 +76,8 @@ npm run trace -- extract --environment work-codex \
 }
 ```
 
-도구는 `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`입니다.
-추출 시 환경 이름을 반드시 지정합니다. [도구 가이드](docs/tools.md)를 참고하세요.
+도구는 `trace_activity` (default), `list_environments`, `list_local_sessions`, `extract_local_events`, `extract_git_activity`입니다.
+통합 조회는 등록된 모든 소스를 사용하고 개별 조회에는 이름을 지정합니다. [도구 가이드](docs/tools.md)를 참고하세요.
 스킬과 개발용 매니페스트가 포함되어 있으며, 빌드 후 MCP를 직접 연결합니다.
 마켓플레이스 자동 설치와 HTTP는 아직 구현하지 않았습니다.
 비공개 터널은 `npm run tunnel:init`, `npm run tunnel:doctor`,
@@ -157,3 +157,17 @@ npm run trace -- discover-git --root /absolute/path/to/projects --register
 `.git` 디렉터리와 worktree의 `.git` 파일을 모두 찾습니다. 일회성 탐색이며 상시 감시는
 하지 않습니다. 터널에 등록하려면 `--config /path/to/config.json`으로 터널의 고정 설정
 파일을 선택하세요. [탐색 제한](docs/tools.md#저장소-자동-탐색-cli)을 참고하세요.
+
+## 기본 통합 조회
+
+```sh
+npm run trace -- --config .local/trace-config.json \
+  --from 2026-09-29T00:00:00+09:00 --to 2026-09-30T00:00:00+09:00
+```
+
+명령 생략, `timeline`, 환경을 지정하지 않은 `extract`는 등록된 모든 에이전트 환경과
+Git 저장소를 조회합니다. MCP 기본 도구는 `trace_activity`입니다. 날짜 생략 시 당일이
+아닌 최근 24시간을 사용합니다. 이벤트는 시간 오름차순으로 합치고 현재 Git 변경은
+별도로 반환합니다. 활동 없는 소스는 생략하며 조회 실패·제한 진단은 유지합니다.
+`--no-working-tree`로 현재 변경을 제외합니다. 텍스트와 diff는 요청 시 포함합니다.
+[통합 조회 의미](docs/tools.md#기본-통합-활동-조회)를 참고하세요.

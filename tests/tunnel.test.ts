@@ -62,7 +62,7 @@ test('tunnel server uses the pinned config and exposes the same MCP tools', asyn
   const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('scripts/tunnel-server.mjs'), config], env: { TRACE_CONFIG: '/not-the-selected-config', CONTROL_PLANE_API_KEY: 'fixture-secret' }, stderr: 'pipe' });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 4);
+    assert.equal((await client.listTools()).tools.length, 5);
     const result = await client.callTool({ name: 'list_environments', arguments: {} });
     const content = result.content as { text: string }[];
     assert.equal(JSON.parse(content[0]!.text).environments[0].name, 'chosen');

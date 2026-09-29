@@ -1,3 +1,4 @@
+import { extractTimeline } from './timeline.js';
 import { discoverRepositories } from './discovery.js';
 import { extractGitActivity } from './git.js';
 import { addRepository, selectRepository } from './config.js';
@@ -6,8 +7,9 @@ import { LocalSessionAdapter } from './extractor.js';
 import { adapterCatalog } from './adapters.js';
 import { addEnvironment, agentSchema, configPath, expandRoot, loadConfig, selectEnvironment } from './config.js';
 
-const help = `trace — extract local agent sessions from a selected environment
+const help = `trace — unified activity from registered local sources
 
+trace [timeline] [--from ISO --to ISO] [--include-text --include-patch]
 trace agents
 trace setup --environment NAME --agent AGENT --root PATH [--replace]
 trace discover-git --root PATH [--register] [--max-depth N] [--max-entries N] [--max-repositories N]
@@ -15,14 +17,14 @@ trace setup-git --repository NAME --root PATH [--replace]
 trace git-activity --repository NAME [--from ISO --to ISO --limit N --include-working-tree --include-patch]
 trace environments
 trace sessions --environment NAME [options]
-trace extract --environment NAME [options]
+trace extract [--environment NAME] [options]
 
 Run through: npm run trace -- <command> [options]
 
   --config PATH        Config file (or TRACE_CONFIG; default ~/.config/trace/config.json)
   --agent AGENT        codex | claude-code | antigravity
   --root PATH          Explicit session/repository root, or discovery search root
-  --environment NAME   Registered environment; required for every extraction
+  --environment NAME   Optional filter for timeline; selects session-only extract
   --from ISO           Inclusive timestamp with timezone
   --to ISO             Exclusive timestamp with timezone
   --session ID         Select one session
@@ -38,6 +40,7 @@ Exit: 0 complete, 1 invalid request, 2 incomplete extraction (inspect diagnostic
 
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
+    'no-working-tree': { type: 'boolean' },
     register: { type: 'boolean' }, 'max-depth': { type: 'string' }, 'max-entries': { type: 'string' }, 'max-repositories': { type: 'string' },
     repository: { type: 'string' }, 'include-patch': { type: 'boolean' }, 'include-working-tree': { type: 'boolean' },
     config: { type: 'string' }, environment: { type: 'string' }, agent: { type: 'string' }, replace: { type: 'boolean' },
@@ -45,12 +48,23 @@ try {
     'include-text': { type: 'boolean' }, limit: { type: 'string' }, offset: { type: 'string' }, help: { type: 'boolean' },
     'scan-mode': { type: 'string' },
   } });
-  const command = positionals[0];
+  const command = positionals[0] ?? 'timeline';
   const path = values.config ? expandRoot(values.config) : configPath();
-  if (values.help || !command) console.log(help);
+  if (values.help) console.log(help);
   else {
     if (positionals.length > 1) throw new Error('Expected one command. Use --help.');
-    if (command === 'agents') console.log(JSON.stringify(adapterCatalog, null, 2));
+    if (command === 'timeline' || command === 'extract' && !values.environment) {
+      if (values.root || values.agent || values.replace || values.session) throw new Error('Unified queries use registered sources; use extract --environment for session selection.');
+      const result = await extractTimeline(await loadConfig(path), { from: values.from, to: values.to,
+        environments: values.environment ? values.environment.split(',') : undefined,
+        repositories: values.repository ? values.repository.split(',') : undefined,
+        includeText: values['include-text'], includePatch: values['include-patch'],
+        includeWorkingTree: !values['no-working-tree'], scanMode: values['scan-mode'],
+        limit: values.limit === undefined ? undefined : Number(values.limit), offset: values.offset === undefined ? undefined : Number(values.offset),
+      });
+      console.log(JSON.stringify(result, null, 2));
+      if (result.incomplete) process.exitCode = 2;
+    } else if (command === 'agents') console.log(JSON.stringify(adapterCatalog, null, 2));
     else if (command === 'discover-git') {
       if (!values.root) throw new Error('discover-git requires an explicit --root PATH.');
       if (values.replace || values.repository || values.agent || values.environment) throw new Error('discover-git assigns new names and never replaces registrations.');

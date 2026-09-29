@@ -231,3 +231,46 @@ Discovery is CLI-only; MCP remains read-only. A tunnel's pinned configuration
 may differ from the CLI default: pass its path using `--config` or `TRACE_CONFIG`.
 Requests reload configuration, so registration needs no tunnel restart. There is
 no automatic rescan, deletion of stale registrations, or background watcher.
+
+## Unified activity (default)
+
+`trace_activity({from?, to?, environments?, repositories?, includeText?,
+includePatch?, includeWorkingTree?, scanMode?, limit?, offset?})` is the default
+MCP entry point for work retrospectives. It queries all **registered** sources;
+it does not discover new roots. Optional name arrays restrict each type; `[]`
+excludes that type. Unknown names are errors before any source is read.
+
+CLI: no command, `timeline`, or `extract` without `--environment`. `timeline`
+accepts comma-separated `--environment`/`--repository` filters, each restricting
+its own type while retaining the other type's default scope. Source-specific
+commands and tools remain available. MCP supports empty-array type exclusion.
+
+`to` defaults to request time, `from` defaults to 24 hours before `to`. Explicit
+bounds use [from,to) with timezone. For calendar-day queries, supply both bounds.
+Text and patches default false; `includeWorkingTree` defaults true (CLI disable:
+`--no-working-tree`). All underlying source semantics and limits still apply.
+
+Output: `timeline` contains `{timestamp, sourceType, source, root, id, data}`;
+agent data preserves session ID and file/line evidence, Git data preserves commit
+hash and changed paths. Items sort ascending by timestamp, with deterministic
+source/ID tie breakers. `currentChanges` contains only dirty tracked Git states,
+separate from historical activity; their edit time is unknown. `sources` contains
+metadata/diagnostics only for active or failed/partial sources. Successfully read
+inactive sources are omitted from both output and user-facing summaries. Empty
+sources must not be listed as "no activity". Errors are not inactivity.
+
+Two concurrent workers start up to 100 sources, stopping new reads after a
+60-second scheduling budget. In-flight reads finish under existing source limits;
+this is not a hard request timeout. Each environment contributes up to 1,000
+events and each repository up to 100 commits. Timeline/current-change payloads
+share an 8 MiB budget before pagination; source metadata is additional. Reaching
+any source/payload limit is explicit and incomplete. A source failure preserves
+other sources' results. No configured/selected sources yields `no_registered_sources`.
+
+`limit` defaults 100 (1–1,000), `offset` defaults zero; `totalCollected` counts
+collected dated events before pagination and `nextOffset` pages this collection.
+Keep returned bounds fixed when paging. Queries rescan and are not snapshots;
+concurrent source changes and budget-constrained reads can shift pages. A null
+nextOffset does not override incomplete diagnostics. Use source-specific tools
+for deeper retrieval after per-source limits. Git clones are not deduplicated by
+hash across repositories. No aggregate human work duration is inferred.

@@ -1,3 +1,4 @@
+import { extractTimeline, timelineSchema } from './timeline.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -12,8 +13,14 @@ const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 const failure = (e: unknown) => ({ isError: true, ...text({ error: e instanceof Error ? e.message : 'Extraction failed' }) });
 
+server.registerTool('trace_activity', {
+  description: 'DEFAULT for local activity, today summaries and work retrospectives: merges ALL registered agent environments and Git repositories into a timestamp-ordered timeline. Optional name arrays narrow each source type; [] excludes that type. Default range is last 24 hours ending now. Inactive sources are omitted; failed/partial sources remain visible as diagnostics. Current tracked Git changes are separate with unknown edit time. Text/patches opt-in. Read source diagnostics, incomplete and nextOffset; preserve returned range when paging. No work-duration inference or cross-source deduplication.',
+  inputSchema: timelineSchema.shape, annotations,
+}, async args => {
+  try { return text(await extractTimeline(await loadConfig(), args)); } catch (e) { return failure(e); }
+});
 server.registerTool('list_environments', {
-  description: 'List configured local agent environments, Git repositories and supported adapters. Does not scan session files. Ask the user which environment to use before extraction if not already specified.',
+  description: 'List configured local agent environments, Git repositories and supported adapters. Does not scan session files. For general activity queries use trace_activity across all registered sources by default.',
   inputSchema: {}, annotations,
 }, async () => {
   try { return text({ ...await loadConfig(), adapters: adapterCatalog }); } catch (e) { return failure(e); }

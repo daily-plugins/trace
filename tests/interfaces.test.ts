@@ -29,7 +29,7 @@ test('CLI registers each agent and requires environment selection; MCP uses the 
   const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/src/server.js')], env: { TRACE_CONFIG: config }, stderr: 'pipe' });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 4);
+    assert.equal((await client.listTools()).tools.length, 5);
     const sessions = await client.callTool({ name: 'list_local_sessions', arguments: { environment: 'codex' } });
     assert.notEqual(sessions.isError, true);
     const content = sessions.content as { type: string; text: string }[];
